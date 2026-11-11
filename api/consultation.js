@@ -2,14 +2,6 @@ const sendJson = (response, body, status = 200) => {
   response.status(status).json(body);
 };
 
-const escapeHtml = (value) =>
-  String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-
 const MAX_LENGTHS = {
   name: 120,
   phone: 40,
@@ -139,53 +131,14 @@ const isValidPhone = (phone) => {
 const validateLength = (fields) =>
   Object.entries(MAX_LENGTHS).find(([field, max]) => fields[field].length > max);
 
-const sendConsultationEmail = async ({ name, phone, email, company, service, budget, timeline, message }) => {
-  const html = `
-    <h2>New consultation request</h2>
-    <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-    <p><strong>Phone/Zalo:</strong> ${escapeHtml(phone)}</p>
-    <p><strong>Email:</strong> ${escapeHtml(email)}</p>
-    <p><strong>Company:</strong> ${escapeHtml(company)}</p>
-    <p><strong>Service:</strong> ${escapeHtml(service)}</p>
-    <p><strong>Budget:</strong> ${escapeHtml(budget)}</p>
-    <p><strong>Timeline:</strong> ${escapeHtml(timeline)}</p>
-    <p><strong>Message:</strong><br>${escapeHtml(message).replaceAll("\n", "<br>")}</p>
-  `;
-
-  try {
-    const emailResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: process.env.FROM_EMAIL,
-        to: [process.env.LEAD_EMAIL],
-        reply_to: email || undefined,
-        subject: `Consultation request: ${name} — ${service}`,
-        html,
-      }),
-    });
-
-    if (!emailResponse.ok) {
-      logErrorCode("email_send_failed", emailResponse);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    logErrorCode("email_send_failed", error);
-    return false;
-  }
-};
-
-const saveLead = async (lead) => {
-  const client = supabaseClientFactory(
+const getSupabaseClient = () =>
+  supabaseClientFactory(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const { data, error } = await client
+
+const saveLead = async (lead) => {
+  const { data, error } = await getSupabaseClient()
     .from("leads")
     .insert([lead])
     .select("id")
@@ -196,12 +149,8 @@ const saveLead = async (lead) => {
 };
 
 const isRateLimited = async (phone) => {
-  const client = supabaseClientFactory(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
   const cutoff = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
-  const { count, error } = await client
+  const { count, error } = await getSupabaseClient()
     .from("leads")
     .select("id", { count: "exact", head: true })
     .eq("phone", phone)
@@ -209,25 +158,6 @@ const isRateLimited = async (phone) => {
 
   if (error) throw error;
   return (count || 0) >= RATE_LIMIT_MAX_SUBMISSIONS;
-};
-
-const markEmailSent = async (leadId) => {
-  if (!leadId) return;
-
-  try {
-    const client = supabaseClientFactory(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-    const { error } = await client
-      .from("leads")
-      .update({ email_sent: true })
-      .eq("id", leadId);
-
-    if (error) logErrorCode("email_flag_update_failed", error);
-  } catch (error) {
-    logErrorCode("email_flag_update_failed", error);
-  }
 };
 
 module.exports = async function handler(request, response) {
@@ -298,22 +228,12 @@ module.exports = async function handler(request, response) {
     return sendJson(response, { message: "Vui lòng chọn giá trị hợp lệ trong biểu mẫu." }, 422);
   }
 
-  const language = inferLanguage(request, fields.language);
-  const sourcePage = inferSourcePage(request, fields.source_page);
-  const marketingConsent =
-    data.marketing_consent === true ||
-    data.marketing_consent === "yes" ||
-    data.marketing_consent === "on";
   const hasSupabase = Boolean(
     process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const hasEmail = Boolean(
-    process.env.RESEND_API_KEY && process.env.LEAD_EMAIL && process.env.FROM_EMAIL
-  );
-
-  if (!hasSupabase && !hasEmail) {
+  if (!hasSupabase) {
     return sendJson(response, {
-      message: "Form đang chờ cấu hình email. Vui lòng liên hệ trực tiếp qua thông tin bên cạnh.",
+      message: "Form đang chờ cấu hình hệ thống tiếp nhận. Vui lòng thử lại sau.",
     }, 503);
   }
 
@@ -330,55 +250,34 @@ module.exports = async function handler(request, response) {
     }
   }
 
-  let leadId = null;
-  let dbSucceeded = false;
-
-  if (hasSupabase) {
-    try {
-      leadId = await saveLead({
-        name: fields.name,
-        phone: fields.phone,
-        email: fields.email || null,
-        company: fields.company || null,
-        service: fields.service,
-        budget: fields.budget || null,
-        timeline: fields.timeline || null,
-        message: fields.message || null,
-        marketing_consent: marketingConsent,
-        language,
-        source_page: sourcePage || null,
-        email_sent: false,
-      });
-      dbSucceeded = true;
-    } catch (error) {
-      logErrorCode("lead_insert_failed", error);
-    }
-  }
-
-  let emailSucceeded = false;
-  if (hasEmail) {
-    emailSucceeded = await sendConsultationEmail(fields);
-  }
-
-  if (dbSucceeded && emailSucceeded) {
-    await markEmailSent(leadId);
-  }
-
-  if (dbSucceeded || emailSucceeded) {
-    return sendJson(response, {
-      message: "Cảm ơn bạn. Tôi sẽ phản hồi trong thời gian sớm nhất.",
+  try {
+    await saveLead({
+      name: fields.name,
+      phone: fields.phone,
+      email: fields.email || null,
+      company: fields.company || null,
+      service: fields.service,
+      budget: fields.budget || null,
+      timeline: fields.timeline || null,
+      message: fields.message || null,
+      marketing_consent:
+        data.marketing_consent === true ||
+        data.marketing_consent === "yes" ||
+        data.marketing_consent === "on",
+      language: inferLanguage(request, fields.language),
+      source_page: inferSourcePage(request, fields.source_page) || null,
+      email_sent: false,
     });
-  }
-
-  if (!hasEmail) {
+  } catch (error) {
+    logErrorCode("lead_insert_failed", error);
     return sendJson(response, {
-      message: "Form đang chờ cấu hình email. Vui lòng liên hệ trực tiếp qua thông tin bên cạnh.",
+      message: "Không thể lưu yêu cầu lúc này. Vui lòng thử lại sau.",
     }, 503);
   }
 
   return sendJson(response, {
-    message: "Không thể gửi thông tin lúc này. Vui lòng thử lại sau.",
-  }, 502);
+    message: "Cảm ơn bạn. Tôi sẽ phản hồi trong thời gian sớm nhất.",
+  });
 };
 
 // Test hook: production code uses the real Supabase client factory above.

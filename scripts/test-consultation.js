@@ -2,9 +2,6 @@ const assert = require("assert");
 const handler = require("../api/consultation");
 
 const ENV_KEYS = [
-  "RESEND_API_KEY",
-  "LEAD_EMAIL",
-  "FROM_EMAIL",
   "SITE_ORIGIN",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -117,23 +114,8 @@ const configureSupabaseMock = ({ insertError = null, updateError = null, rateLim
   return calls;
 };
 
-const configureEmailMock = ({ ok = true, throwError = false } = {}) => {
-  global.fetch = async () => {
-    if (throwError) throw new Error("network failure");
-    return { ok, status: ok ? 200 : 500 };
-  };
-};
-
-const configureEmailEnvironment = () => {
-  setEnv({
-    RESEND_API_KEY: "resend-test-key",
-    LEAD_EMAIL: "owner@example.com",
-    FROM_EMAIL: "website@example.com",
-  });
-};
-
 const configureAllEnvironment = () => {
-  configureEmailEnvironment();
+  setEnv();
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test-key";
 };
@@ -167,16 +149,14 @@ const tests = [
   ["rate limits repeated phone submissions", async () => {
     configureAllEnvironment();
     const calls = configureSupabaseMock({ rateLimitCount: 3 });
-    configureEmailMock({ ok: true });
     const result = await invoke();
     assert.equal(result.statusCode, 429);
     assert.equal(calls.rateCheck, 1);
     assert.equal(calls.insert, 0);
   }],
-  ["returns success when DB works and email fails", async () => {
+  ["returns success when DB works", async () => {
     configureAllEnvironment();
     const calls = configureSupabaseMock();
-    configureEmailMock({ ok: false });
     const result = await invoke({
       body: validLead({ language: "en", source_page: "/en/consultation/" }),
     });
@@ -187,19 +167,16 @@ const tests = [
     assert.equal(calls.insertPayload.source_page, "/en/consultation/");
     assert.equal(calls.insertPayload.email_sent, false);
   }],
-  ["returns success when DB fails and email works", async () => {
+  ["returns a service error when DB fails", async () => {
     configureAllEnvironment();
     configureSupabaseMock({ insertError: { code: "DB_FAIL" } });
-    configureEmailMock({ ok: true });
     const result = await invoke();
-    assert.equal(result.statusCode, 200);
+    assert.equal(result.statusCode, 503);
   }],
-  ["returns an error only when DB and email both fail", async () => {
-    configureAllEnvironment();
-    configureSupabaseMock({ insertError: { code: "DB_FAIL" } });
-    configureEmailMock({ ok: false });
+  ["returns a service error when Supabase is not configured", async () => {
+    setEnv();
     const result = await invoke();
-    assert.equal(result.statusCode, 502);
+    assert.equal(result.statusCode, 503);
   }],
 ];
 

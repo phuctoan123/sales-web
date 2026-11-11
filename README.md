@@ -6,7 +6,7 @@ The site is now a static, multi-page website designed for Vercel:
 
 - Vietnamese pages use root paths such as `/`, `/dich-vu/` and `/tu-van/`.
 - English pages use `/en/` and matching paths such as `/en/services/`.
-- `/api/consultation` is a Vercel Node.js Function that sends leads through Resend.
+- `/api/consultation` is a Vercel Node.js Function that stores leads in Supabase.
 - `/admin/` is a static HTML/JS admin app that uses Supabase Auth and the anon key;
   the service role key is never sent to the browser.
 - The final domain is intentionally not hard-coded yet. Add the production domain
@@ -18,8 +18,8 @@ The site is now a static, multi-page website designed for Vercel:
 - Public site: static HTML, `css/site.css` and `js/site.js`, with Vietnamese pages
   at the root and English pages under `/en/`.
 - Lead API: `api/consultation.js` remains a CommonJS Vercel Function. It validates
-  input, applies a small phone-based rate limit, writes to Supabase with the
-  service role key, then attempts the Resend notification.
+  input, applies a small phone-based rate limit and writes to Supabase with the
+  service role key. The admin app is the only lead destination.
 - Admin: `admin/index.html`, `admin/admin.css`, `admin/admin.js` and
   `admin/config.js`. Supabase JS `2.49.8` is loaded from jsDelivr and all lead
   access is enforced by Supabase Auth + RLS.
@@ -30,15 +30,11 @@ The site is now a static, multi-page website designed for Vercel:
 
 Configure these variables in the Vercel project before enabling the form:
 
-`RESEND_API_KEY`, `LEAD_EMAIL`, `FROM_EMAIL`, and optionally `SITE_ORIGIN`.
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and optionally `SITE_ORIGIN`.
 
-To store consultation leads in Supabase, also configure `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`. The service role key is server-only and must not be
-included in frontend files.
-
-`FROM_EMAIL` must be an address allowed by the email provider. Preview deployments
-remain suitable for QA; configure the production domain and email sender before
-accepting real leads.
+The service role key is server-only and must not be included in frontend files.
+The consultation flow does not send email; leads are stored in Supabase and read
+from `/admin/`.
 
 For the admin browser app, fill `admin/config.js` with the public Supabase values:
 
@@ -115,14 +111,13 @@ the Vercel API function; test the real form against a Vercel Preview deployment.
 - Run the complete `supabase/schema.sql` in the SQL Editor.
 - Create the first Auth user and insert its UUID into `public.admins`.
 - Fill `admin/config.js` with the project URL and anon key.
-- Add all Vercel variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-  `RESEND_API_KEY`, `LEAD_EMAIL`, `FROM_EMAIL`, and `SITE_ORIGIN` without a
-  trailing slash.
-- Configure a verified Resend sender and redeploy after changing variables.
+- Add Vercel variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+  `SITE_ORIGIN` without a trailing slash.
+- Redeploy after changing environment variables.
 - Enable 2FA for the Supabase/Vercel accounts and use a strong unique password.
-- Test the real consultation form, email delivery, DB row creation, admin login,
-  RLS denial for a non-admin, status/note updates, `contacted_at`, CSV export and
-  the 375px mobile layout.
+- Test the real consultation form, DB row creation, admin login, RLS denial for a
+  non-admin, status/note updates, `contacted_at`, CSV export and the 375px mobile
+  layout.
 - Confirm backups, domain/DNS, privacy-policy details and monitoring before
   accepting production leads.
 
