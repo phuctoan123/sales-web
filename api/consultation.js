@@ -68,8 +68,29 @@ let supabaseClientFactory = (url, serviceRoleKey) => {
 };
 
 const logErrorCode = (operation, error) => {
-  const code = error && (error.code || error.status || error.name);
-  console.error(`[consultation] ${operation}:${code || "unknown"}`);
+  if (!error) {
+    console.error(`[consultation] ${operation}:unknown`);
+    return;
+  }
+
+  if (typeof error === "string") {
+    console.error(`[consultation] ${operation}:string_error`);
+    return;
+  }
+
+  const rawCode =
+    error.code ||
+    error.status ||
+    error.statusCode ||
+    error.error_code ||
+    error.name ||
+    error.cause?.code;
+  const constructorName = error.constructor && error.constructor.name;
+  const fallbackCode = constructorName && constructorName !== "Object"
+    ? constructorName
+    : "object_error";
+  const code = String(rawCode || fallbackCode).replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80);
+  console.error(`[consultation] ${operation}:${code}`);
 };
 
 const getText = (value) => String(value == null ? "" : value).trim();
