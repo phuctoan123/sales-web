@@ -74,6 +74,9 @@ as $$
   );
 $$;
 
+revoke execute on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
 revoke all on table public.leads from anon, authenticated;
 revoke all on table public.admins from anon, authenticated;
 
@@ -103,6 +106,9 @@ create index if not exists leads_created_at_desc_idx
 
 create index if not exists leads_status_idx
   on public.leads (status);
+
+create index if not exists leads_phone_created_at_idx
+  on public.leads (phone, created_at desc);
 
 -- To add an administrator, first create the user in Supabase Auth, then run:
 -- insert into public.admins (user_id) values ('AUTH-USER-UUID-HERE');

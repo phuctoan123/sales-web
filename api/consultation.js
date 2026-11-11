@@ -23,6 +23,9 @@ const MAX_LENGTHS = {
   source_page: 2048,
 };
 
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_MAX_SUBMISSIONS = 3;
+
 const VALID_VALUES = {
   service: new Set([
     "Website chuẩn SEO",
@@ -171,6 +174,22 @@ const saveLead = async (lead) => {
   return data && data.id;
 };
 
+const isRateLimited = async (phone) => {
+  const client = supabaseClientFactory(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const cutoff = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+  const { count, error } = await client
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("phone", phone)
+    .gte("created_at", cutoff);
+
+  if (error) throw error;
+  return (count || 0) >= RATE_LIMIT_MAX_SUBMISSIONS;
+};
+
 const markEmailSent = async (leadId) => {
   if (!leadId) return;
 
@@ -197,7 +216,7 @@ module.exports = async function handler(request, response) {
 
   const siteOrigin = process.env.SITE_ORIGIN;
   const requestOrigin = request.headers && request.headers.origin;
-  if (siteOrigin && requestOrigin && requestOrigin !== siteOrigin) {
+  if (siteOrigin && requestOrigin !== siteOrigin) {
     return sendJson(response, { message: "Invalid origin." }, 403);
   }
 
@@ -275,6 +294,19 @@ module.exports = async function handler(request, response) {
     return sendJson(response, {
       message: "Form đang chờ cấu hình email. Vui lòng liên hệ trực tiếp qua thông tin bên cạnh.",
     }, 503);
+  }
+
+  if (hasSupabase) {
+    try {
+      if (await isRateLimited(fields.phone)) {
+        return sendJson(response, {
+          message: "Bạn đã gửi quá nhiều yêu cầu trong thời gian ngắn. Vui lòng thử lại sau.",
+        }, 429);
+      }
+    } catch (error) {
+      // A rate-limit lookup must not make the lead form unavailable.
+      logErrorCode("rate_limit_check_failed", error);
+    }
   }
 
   let leadId = null;

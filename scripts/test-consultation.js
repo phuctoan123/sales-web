@@ -65,12 +65,28 @@ const invoke = async ({ method = "POST", body = validLead(), headers = {} } = {}
   return { statusCode, responseBody };
 };
 
-const configureSupabaseMock = ({ insertError = null, updateError = null } = {}) => {
-  const calls = { insert: 0, update: 0, insertPayload: null };
+const configureSupabaseMock = ({ insertError = null, updateError = null, rateLimitCount = 0, rateLimitError = null } = {}) => {
+  const calls = { insert: 0, update: 0, rateCheck: 0, insertPayload: null };
   handler._setSupabaseClientFactory(() => ({
     from(table) {
       assert.equal(table, "leads");
       return {
+        select(columns, options) {
+          assert.equal(options.head, true);
+          return {
+            eq(field, value) {
+              assert.equal(field, "phone");
+              assert.equal(value, "0901234567");
+              calls.rateCheck += 1;
+              return {
+                async gte(fieldName) {
+                  assert.equal(fieldName, "created_at");
+                  return { count: rateLimitCount, error: rateLimitError };
+                },
+              };
+            },
+          };
+        },
         insert(rows) {
           calls.insert += 1;
           calls.insertPayload = rows[0];
@@ -128,6 +144,11 @@ const tests = [
     const result = await invoke({ method: "GET" });
     assert.equal(result.statusCode, 405);
   }],
+  ["rejects a mismatched origin", async () => {
+    setEnv({ SITE_ORIGIN: "https://example.com" });
+    const result = await invoke({ headers: { origin: "https://evil.example" } });
+    assert.equal(result.statusCode, 403);
+  }],
   ["accepts the honeypot response without sending", async () => {
     setEnv();
     const result = await invoke({ body: validLead({ website: "bot" }) });
@@ -142,6 +163,15 @@ const tests = [
     setEnv();
     const result = await invoke({ body: validLead({ service: "Unknown service" }) });
     assert.equal(result.statusCode, 422);
+  }],
+  ["rate limits repeated phone submissions", async () => {
+    configureAllEnvironment();
+    const calls = configureSupabaseMock({ rateLimitCount: 3 });
+    configureEmailMock({ ok: true });
+    const result = await invoke();
+    assert.equal(result.statusCode, 429);
+    assert.equal(calls.rateCheck, 1);
+    assert.equal(calls.insert, 0);
   }],
   ["returns success when DB works and email fails", async () => {
     configureAllEnvironment();

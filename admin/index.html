@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="description" content="Trang quản trị lead nội bộ." />
+    <title>Quản trị lead | Phuc Toan Nguyen</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body class="admin-body">
+    <a class="skip-link" href="#main-content">Bỏ qua đến nội dung chính</a>
+    <main id="main-content" class="admin-shell">
+      <section id="login-view" class="login-view" aria-labelledby="login-title">
+        <div class="login-card">
+          <p class="eyebrow">Phuc Toan Nguyen</p>
+          <h1 id="login-title">Đăng nhập quản trị</h1>
+          <p class="muted">Quản lý các yêu cầu tư vấn được gửi từ website.</p>
+          <form id="login-form" class="admin-form" novalidate>
+            <label for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" autocomplete="username" required />
+            <label for="login-password">Mật khẩu</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+            <button class="btn" type="submit">Đăng nhập</button>
+            <p id="login-status" class="status-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="app-view" class="app-view" hidden aria-labelledby="app-title">
+        <header class="admin-header">
+          <div>
+            <p class="eyebrow">Lead management</p>
+            <h1 id="app-title">Quản trị yêu cầu tư vấn</h1>
+          </div>
+          <div class="admin-header-actions">
+            <span id="current-user" class="user-pill"></span>
+            <button id="logout-button" class="btn btn-secondary" type="button">Đăng xuất</button>
+          </div>
+        </header>
+
+        <div id="app-status" class="status-message" role="status" aria-live="polite"></div>
+
+        <section class="dashboard-grid" aria-label="Tổng quan lead">
+          <article class="metric-card">
+            <span class="metric-label">Tổng lead</span>
+            <strong id="metric-total">—</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Lead mới 7 ngày</span>
+            <strong id="metric-recent">—</strong>
+          </article>
+          <article class="dashboard-card dashboard-status-card">
+            <h2>Trạng thái</h2>
+            <div id="status-breakdown" class="breakdown-list" aria-live="polite"></div>
+          </article>
+          <article class="dashboard-card dashboard-service-card">
+            <h2>Dịch vụ</h2>
+            <div id="service-breakdown" class="breakdown-list" aria-live="polite"></div>
+          </article>
+        </section>
+
+        <section class="workspace" aria-label="Danh sách và chi tiết lead">
+          <div class="list-panel">
+            <form id="filters-form" class="filters-card" novalidate>
+              <div class="filters-grid">
+                <div class="field-group field-search">
+                  <label for="filter-search">Tìm kiếm</label>
+                  <input id="filter-search" name="search" type="search" placeholder="Tên, SĐT, email, doanh nghiệp" />
+                </div>
+                <div class="field-group">
+                  <label for="filter-status">Trạng thái</label>
+                  <select id="filter-status" name="status">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="new">Mới</option>
+                    <option value="contacted">Đã liên hệ</option>
+                    <option value="quoted">Đã báo giá</option>
+                    <option value="won">Đã chốt</option>
+                    <option value="lost">Không tiếp tục</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="filter-service">Dịch vụ</label>
+                  <select id="filter-service" name="service">
+                    <option value="">Tất cả dịch vụ</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="filter-from">Từ ngày</label>
+                  <input id="filter-from" name="from" type="date" />
+                </div>
+                <div class="field-group">
+                  <label for="filter-to">Đến ngày</label>
+                  <input id="filter-to" name="to" type="date" />
+                </div>
+              </div>
+              <div class="filter-actions">
+                <button class="btn" type="submit">Lọc lead</button>
+                <button id="reset-filters" class="btn btn-secondary" type="button">Xoá bộ lọc</button>
+                <button id="export-csv" class="btn btn-quiet" type="button">Xuất CSV</button>
+              </div>
+            </form>
+
+            <div class="table-card">
+              <div class="table-heading">
+                <div>
+                  <h2>Danh sách lead</h2>
+                  <p id="list-summary" class="muted">—</p>
+                </div>
+                <span id="table-status" class="status-message" role="status" aria-live="polite"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Danh sách yêu cầu tư vấn</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Thời gian</th>
+                      <th scope="col">Tên</th>
+                      <th scope="col">SĐT</th>
+                      <th scope="col">Dịch vụ</th>
+                      <th scope="col">Ngân sách</th>
+                      <th scope="col">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leads-body"></tbody>
+                </table>
+              </div>
+              <div id="empty-state" class="empty-state" hidden></div>
+              <nav class="pagination" aria-label="Phân trang lead">
+                <button id="previous-page" class="btn btn-secondary" type="button">← Trước</button>
+                <span id="page-summary" aria-live="polite">Trang 1 / 1</span>
+                <button id="next-page" class="btn btn-secondary" type="button">Sau →</button>
+              </nav>
+            </div>
+          </div>
+
+          <aside class="detail-panel" aria-labelledby="detail-title">
+            <div id="detail-empty" class="detail-empty">
+              <h2 id="detail-title">Chi tiết lead</h2>
+              <p class="muted">Chọn một lead trong danh sách để xem đầy đủ thông tin.</p>
+            </div>
+            <div id="detail-view" hidden>
+              <div class="detail-heading">
+                <div>
+                  <p class="eyebrow">Lead detail</p>
+                  <h2 id="detail-name">Chi tiết lead</h2>
+                </div>
+                <span id="detail-status-badge" class="status-badge"></span>
+              </div>
+              <div class="quick-links" aria-label="Liên hệ nhanh">
+                <a id="detail-phone-link" class="quick-link" href="#">Gọi điện</a>
+                <a id="detail-email-link" class="quick-link" href="#">Email</a>
+                <a id="detail-zalo-link" class="quick-link" href="#" target="_blank" rel="noopener">Zalo</a>
+              </div>
+              <dl id="detail-fields" class="detail-fields"></dl>
+              <div class="detail-editor">
+                <div class="field-group">
+                  <label for="detail-status">Cập nhật trạng thái</label>
+                  <select id="detail-status">
+                    <option value="new">Mới</option>
+                    <option value="contacted">Đã liên hệ</option>
+                    <option value="quoted">Đã báo giá</option>
+                    <option value="won">Đã chốt</option>
+                    <option value="lost">Không tiếp tục</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label for="detail-note">Ghi chú nội bộ</label>
+                  <textarea id="detail-note" rows="5" placeholder="Chỉ hiển thị trong trang quản trị"></textarea>
+                </div>
+                <button id="save-detail" class="btn" type="button">Lưu thay đổi</button>
+                <p id="detail-status-message" class="status-message" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="/admin/admin.js"></script>
+  </body>
+</html>
